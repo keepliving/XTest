@@ -2,19 +2,17 @@ package com.test.xtest
 
 import com.gh0u1l5.wechatmagician.spellbook.SpellBook
 import com.gh0u1l5.wechatmagician.spellbook.util.BasicUtil
-import com.test.xtest.plugins.Alter
-import com.test.xtest.plugins.Message
+import com.test.xtest.plugins.Log
 import dalvik.system.PathClassLoader
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XposedBridge
-import de.robv.android.xposed.callbacks.XC_LoadPackage
 import de.robv.android.xposed.XposedBridge.log
-import java.lang.Exception
+import de.robv.android.xposed.callbacks.XC_LoadPackage
 
 class Hook: IXposedHookLoadPackage {
     companion object {
         const val PKG = "com.test.xtest"
-        const val HOOK_CLASS = "Hook"
+        const val HOOK_CLASS = "com.test.xtest.Hook"
         const val HOOK_METHOD = "loadPlugins"
     }
 
@@ -29,7 +27,9 @@ class Hook: IXposedHookLoadPackage {
     }
 
     fun loadPlugins(lpparam: XC_LoadPackage.LoadPackageParam) {
-        SpellBook.startup(lpparam, listOf(Alter, Message))
+        log("windy: start to load plugins")
+//        SpellBook.startup(lpparam, listOf(Log))
+        Log.hook(lpparam)
     }
 
     private fun startupOTA(lpparam: XC_LoadPackage.LoadPackageParam) {
@@ -42,7 +42,7 @@ class Hook: IXposedHookLoadPackage {
             method.invoke(instance, lpparam)
         } catch (e: Exception) {
             e.printStackTrace()
-            log(e.message)
+            log(e.message ?: "")
         }
     }
 }
