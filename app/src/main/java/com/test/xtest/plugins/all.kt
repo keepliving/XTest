@@ -1,9 +1,6 @@
 package com.test.xtest.plugins
 
-import android.content.ContentValues
 import com.gh0u1l5.wechatmagician.spellbook.C
-import com.gh0u1l5.wechatmagician.spellbook.base.Operation
-import com.gh0u1l5.wechatmagician.spellbook.interfaces.IDatabaseHook
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers.findAndHookMethod
@@ -26,10 +23,14 @@ fun mylog(message: String) {
 //}
 
 object Log {
+    private const val loggerClass = "com.tencent.mm.sdk.platformtools.ab"
+    private const val xloggerClass = "com.tencent.mars.xlog.Xlog"
+    private const val loggerImplementClass = "com.tencent.mm.sdk.platformtools.ab\$1"
+    private const val loggerInterface = "com.tencent.mm.sdk.platformtools.ab\$a"
 
-    private fun hookLog(methodName: String, lpparam: XC_LoadPackage.LoadPackageParam) {
+    private fun hookLogFunction(cls: String, methodName: String, lpparam: XC_LoadPackage.LoadPackageParam) {
         findAndHookMethod(
-            "com.tencent.mm.sdk.platformtools.ab\$1",
+            cls,
             lpparam.classLoader,
             methodName,
             C.String, C.String, C.String, C.Int, C.Int, C.Long, C.Long, C.String, object : XC_MethodHook() {
@@ -41,8 +42,9 @@ object Log {
             })
     }
 
-    private fun hookLogLever(lpparam: XC_LoadPackage.LoadPackageParam) {
-        findAndHookMethod("com.tencent.mm.sdk.platformtools.ab\$1",
+    private fun hookGetLogLever(lpparam: XC_LoadPackage.LoadPackageParam) {
+        findAndHookMethod(
+            loggerImplementClass,
             lpparam.classLoader,
             "getLogLevel", object : XC_MethodHook() {
                 @Throws(Throwable::class)
@@ -52,14 +54,27 @@ object Log {
             })
     }
 
+    private fun hookLogSet(lpparam: XC_LoadPackage.LoadPackageParam) {
+        findAndHookMethod(
+            loggerClass,
+            lpparam.classLoader,
+            "a",
+            loggerInterface, object : XC_MethodHook() {
+                @Throws(Throwable::class)
+                override fun afterHookedMethod(param: MethodHookParam) {
+                    mylog("set logger: ${param.args[0]}")
+                }
+            })
+    }
+
     fun hook(lpparam: XC_LoadPackage.LoadPackageParam) {
-        this.hookLog("logV", lpparam)
-        this.hookLog("logI", lpparam)
-        this.hookLog("logD", lpparam)
-        this.hookLog("logW", lpparam)
-        this.hookLog("logE", lpparam)
-        this.hookLog("logF", lpparam)
-        this.hookLogLever(lpparam)
+        this.hookGetLogLever(lpparam)
+        this.hookLogSet(lpparam)
+
+        arrayOf("logV", "logI", "logD", "logW", "logE", "logF").forEach {
+            this.hookLogFunction(loggerImplementClass, it, lpparam)
+            this.hookLogFunction(xloggerClass, it, lpparam)
+        }
     }
 }
 
