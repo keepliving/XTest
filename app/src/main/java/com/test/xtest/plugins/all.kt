@@ -5,9 +5,20 @@ import com.gh0u1l5.wechatmagician.spellbook.C
 import com.gh0u1l5.wechatmagician.spellbook.WechatGlobal
 import com.gh0u1l5.wechatmagician.spellbook.util.ReflectionUtil
 import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedHelpers.findAndHookMethod
+import de.robv.android.xposed.XposedHelpers.*
 import de.robv.android.xposed.callbacks.XC_LoadPackage
 import java.util.*
+import kotlin.concurrent.thread
+
+object GlobalContext {
+    lateinit var classLoader: ClassLoader
+    var sendTextCompenent: Any? = null
+}
+
+object TextMessage {
+    var target: String = ""
+    var content: String = ""
+}
 
 object Log {
     private const val loggerClass = "com.tencent.mm.sdk.platformtools.ab"               // 这个类是日志的入口
@@ -81,6 +92,129 @@ object Log {
                 @Throws(Throwable::class)
                 override fun afterHookedMethod(param: MethodHookParam) {
                     myLog("set logger: ${param.args[0]}")
+                }
+            })
+    }
+
+    private fun sendTextMessage() {
+        try {
+            val groupId = "4582929225@chatroom"
+            TextMessage.target = "Windy268730"
+            TextMessage.content = "自动发送的消息是否会成功呢？"
+            callMethod(GlobalContext.sendTextCompenent, "er", TextMessage.content, 0)
+        } catch (e: Exception) {
+            myLog("call send text message error")
+            e.printStackTrace()
+        }
+    }
+
+    private fun hookSend(lpparam: XC_LoadPackage.LoadPackageParam) {
+        findAndHookMethod("com.tencent.mm.modelmulti.h", lpparam.classLoader, "a",
+            this.findClassIfExists("com.tencent.mm.network.e", lpparam.classLoader),
+            this.findClassIfExists("com.tencent.mm.ah.f", lpparam.classLoader),
+            object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    myLog("sending message: ${param.args[0]?.javaClass}, ${param.args[1]?.javaClass}")
+                    Thread.dumpStack()
+                }
+            })
+
+        // 这个函数是文本消息类入队对象的构造方法，可以在这里修改参数，修改参数1则可以修改发送的对象
+        findAndHookConstructor("com.tencent.mm.modelmulti.h", lpparam.classLoader,
+            C.String, C.String, C.Int, C.Int, Object::class.java,
+            object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    if(TextMessage.target.isNotBlank()) {
+                        param.args[0] = TextMessage.target
+                        param.args[1] = TextMessage.content
+                    }
+
+                    myLog("construct message : ${param.args[0]} ${param.args[1]}, ${param.args[2]} ${param.args[3]} ${param.args[4]}")
+                }
+            })
+
+        findAndHookMethod("com.tencent.mm.ah.p", lpparam.classLoader, "a",
+            this.findClassIfExists("com.tencent.mm.ah.m", lpparam.classLoader),
+            C.Int,
+            object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    myLog("add to queue: ${param.args[0]} ${param.args[1]}")
+                    Thread.dumpStack()
+                }
+            })
+
+        // TODO 文本消息的入口可以在这里发送了
+        // 发送消息按钮按下后的处理函数，在这里可以修改你要发送的内容
+        // 但是不能直接调用这个函数发送给目标用户，需要设置好发送对象才可以（hook另外一个方法修改）
+        findAndHookMethod("com.tencent.mm.ui.chatting.c.ai", lpparam.classLoader, "er",
+            C.String, C.Int,
+            object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    // save SendTextComponent object for later use
+                    GlobalContext.sendTextCompenent = param.thisObject
+                    myLog("[SendTextComponent] send message: ${param.args[0]}, ${param.args[1]}")
+                    Thread.dumpStack()
+                }
+
+                override fun afterHookedMethod(param: MethodHookParam?) {
+                    // 发送完消息后重置修改的内容为空
+                    if(TextMessage.target.isNotBlank()) {
+                        TextMessage.target = ""
+                        TextMessage.content = ""
+                    }
+                }
+            })
+
+        findAndHookMethod("com.tencent.mm.ui.chatting.c.ai", lpparam.classLoader, "a",
+            this.findClassIfExists("com.tencent.mm.ui.chatting.d.a", lpparam.classLoader),
+            object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    myLog("xHQ ${param.args[0]}")
+                    Thread.dumpStack()
+                }
+            })
+
+        // network
+        findAndHookMethod("com.tencent.mm.network.z", lpparam.classLoader, "a",
+            this.findClassIfExists("com.tencent.mm.network.r", lpparam.classLoader),
+            this.findClassIfExists("com.tencent.mm.network.l", lpparam.classLoader),
+            this.findClassIfExists("com.tencent.mm.network.c", lpparam.classLoader),
+            C.Int,
+            object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    myLog("network: ${param.args[0]} ${param.args[1]} ${param.args[2]} ${param.args[3]}")
+                    Thread.dumpStack()
+                }
+            })
+
+        // network
+        findAndHookMethod("com.tencent.mm.ah.r", lpparam.classLoader, "a",
+            this.findClassIfExists("com.tencent.mm.network.r", lpparam.classLoader),
+            this.findClassIfExists("com.tencent.mm.network.l", lpparam.classLoader),
+            object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    myLog("MicroMsg.RDispatcher")
+                    Thread.dumpStack()
+                }
+            })
+
+        // network
+        findAndHookMethod("com.tencent.mm.network.t", lpparam.classLoader, "a",
+            this.findClassIfExists("com.tencent.mm.network.r", lpparam.classLoader),
+            this.findClassIfExists("com.tencent.mm.network.l", lpparam.classLoader),
+            object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    myLog("MMAutoAuth.send")
+                    Thread.dumpStack()
+                }
+            })
+
+        // protocol
+        findAndHookMethod("com.tencent.mm.ah.t", lpparam.classLoader, "YJ",
+            object : XC_MethodHook() {
+                override fun afterHookedMethod(param: MethodHookParam) {
+                    myLog("protocol-YJ ${param.result}")
+                    Thread.dumpStack()
                 }
             })
     }
@@ -183,18 +317,31 @@ object Log {
     }
 
     fun hook(lpparam: XC_LoadPackage.LoadPackageParam) {
+        GlobalContext.classLoader = lpparam.classLoader
         this.hookGetLogLever(lpparam)
         this.hookLogSet(lpparam)
 
-        arrayOf("logV", "logI", "logD", "logW", "logE", "logF").forEach {
-            this.hookLogFunctionAboveInfoLevel(loggerImplementClass, it, lpparam)
-            this.hookLogFunctionAboveInfoLevel(xloggerClass, it, lpparam)
-        }
-        arrayOf("d").forEach {
-            this.hookLogFunctionBelowInfoLevel(it, lpparam)
-        }
+//        arrayOf("logV", "logI", "logD", "logW", "logE", "logF").forEach {
+//            this.hookLogFunctionAboveInfoLevel(loggerImplementClass, it, lpparam)
+//            this.hookLogFunctionAboveInfoLevel(xloggerClass, it, lpparam)
+//        }
+//        arrayOf("d").forEach {
+//            this.hookLogFunctionBelowInfoLevel(it, lpparam)
+//        }
 
+        this.hookSend(lpparam)
         this.hookRecv(lpparam)
+
+        thread(start = true) {
+            while(true) {
+                Thread.sleep(10 * 1000)
+                if(GlobalContext.sendTextCompenent != null) {
+                    myLog("start to to send the text")
+                    sendTextMessage()
+                    break
+                }
+            }
+        }
     }
 }
 

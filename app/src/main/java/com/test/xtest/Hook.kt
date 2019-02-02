@@ -29,7 +29,13 @@ class Hook: IXposedHookLoadPackage {
     fun loadPlugins(lpparam: XC_LoadPackage.LoadPackageParam) {
         log("windy: start to load plugins")
 //        SpellBook.startup(lpparam, listOf(Log))
-        Log.hook(lpparam)
+        try {
+            Log.hook(lpparam)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            log(e)
+            throw e
+        }
     }
 
     private fun startupOTA(lpparam: XC_LoadPackage.LoadPackageParam) {
@@ -42,7 +48,7 @@ class Hook: IXposedHookLoadPackage {
             method.invoke(instance, lpparam)
         } catch (e: Exception) {
             e.printStackTrace()
-            log(e.message ?: "")
+            log(e)
         }
     }
 }
