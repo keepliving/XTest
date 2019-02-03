@@ -13,11 +13,17 @@ import kotlin.concurrent.thread
 object GlobalContext {
     lateinit var classLoader: ClassLoader
     var sendTextCompenent: Any? = null
+    var chattingSmileyPanel: Any? = null
 }
 
 object TextMessage {
     var target: String = ""
     var content: String = ""
+}
+
+object EmojiMessage {
+    var target: String = ""
+    var emojiInfo: Any? = null
 }
 
 object Log {
@@ -108,6 +114,17 @@ object Log {
         }
     }
 
+    private fun sendEmoji() {
+        try {
+            val groupId = "4582929225@chatroom"
+            EmojiMessage.target = groupId
+            callMethod(GlobalContext.chattingSmileyPanel, "p", EmojiMessage.emojiInfo)
+        } catch (e: Exception) {
+            myLog("call send emoji message error")
+            e.printStackTrace()
+        }
+    }
+
     private fun hookSend(lpparam: XC_LoadPackage.LoadPackageParam) {
         findAndHookMethod("com.tencent.mm.modelmulti.h", lpparam.classLoader, "a",
             this.findClassIfExists("com.tencent.mm.network.e", lpparam.classLoader),
@@ -130,6 +147,17 @@ object Log {
                     }
 
                     myLog("construct message : ${param.args[0]} ${param.args[1]}, ${param.args[2]} ${param.args[3]} ${param.args[4]}")
+                }
+            })
+
+        // 这个类是表情类入队对象的构造方法，可以在这里修改参数
+        findAndHookConstructor("com.tencent.mm.plugin.emoji.f.r", lpparam.classLoader,
+            C.String, C.String, this.findClassIfExists("com.tencent.mm.storage.emotion.EmojiInfo", lpparam.classLoader), C.Long, Byte::class.java,
+            object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    if(EmojiMessage.target.isNotBlank()) {
+                        param.args[0] = EmojiMessage.target
+                    }
                 }
             })
 
@@ -161,6 +189,24 @@ object Log {
                     if(TextMessage.target.isNotBlank()) {
                         TextMessage.target = ""
                         TextMessage.content = ""
+                    }
+                }
+            })
+
+
+        // TODO 发送表情
+        findAndHookMethod("com.tencent.mm.ui.chatting.v", lpparam.classLoader, "p",
+            this.findClassIfExists("com.tencent.mm.storage.emotion.EmojiInfo", lpparam.classLoader),
+            object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    GlobalContext.chattingSmileyPanel = param.thisObject
+                    EmojiMessage.emojiInfo = param.args[0] // copy send
+                }
+
+                override fun afterHookedMethod(param: MethodHookParam) {
+                    if(EmojiMessage.target.isNotBlank() && EmojiMessage.emojiInfo != null) {
+                        EmojiMessage.target = ""
+                        EmojiMessage.emojiInfo = null
                     }
                 }
             })
@@ -274,8 +320,6 @@ object Log {
         //}
         val classsMessageBodyContent = this.findClassIfExists("com.tencent.mm.protocal.protobuf.cj", lpparam.classLoader)
 
-
-
         fun logFouondation(message: String) = myLog("[foundation.c] [recv] $message")
 
         // 消息接受的核心流程点
@@ -321,23 +365,34 @@ object Log {
         this.hookGetLogLever(lpparam)
         this.hookLogSet(lpparam)
 
-//        arrayOf("logV", "logI", "logD", "logW", "logE", "logF").forEach {
-//            this.hookLogFunctionAboveInfoLevel(loggerImplementClass, it, lpparam)
-//            this.hookLogFunctionAboveInfoLevel(xloggerClass, it, lpparam)
-//        }
-//        arrayOf("d").forEach {
-//            this.hookLogFunctionBelowInfoLevel(it, lpparam)
-//        }
+        arrayOf("logV", "logI", "logD", "logW", "logE", "logF").forEach {
+            this.hookLogFunctionAboveInfoLevel(loggerImplementClass, it, lpparam)
+            this.hookLogFunctionAboveInfoLevel(xloggerClass, it, lpparam)
+        }
+        arrayOf("d").forEach {
+            this.hookLogFunctionBelowInfoLevel(it, lpparam)
+        }
 
         this.hookSend(lpparam)
         this.hookRecv(lpparam)
 
+//        thread(start = true) {
+//            while(true) {
+//                Thread.sleep(10 * 1000)
+//                if(GlobalContext.sendTextCompenent != null) {
+//                    myLog("start to to send the text")
+//                    sendTextMessage()
+//                    break
+//                }
+//            }
+//        }
+
         thread(start = true) {
             while(true) {
                 Thread.sleep(10 * 1000)
-                if(GlobalContext.sendTextCompenent != null) {
-                    myLog("start to to send the text")
-                    sendTextMessage()
+                if(GlobalContext.chattingSmileyPanel != null && EmojiMessage.emojiInfo != null) {
+                    myLog("start to send emoji message")
+                    sendEmoji()
                     break
                 }
             }
